@@ -1,24 +1,25 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import sqlite3
 
-
+# ---------------------------------------------------------
 # 1. KONFIGURACJA STRONY
-
+# ---------------------------------------------------------
 st.set_page_config(
     page_title="Budżet 6 Słoików",
     page_icon="💰",
     layout="wide"
 )
 
-
-# 2. TYTUŁ I DANE WEJŚCIOWE
-
+# ---------------------------------------------------------
+# 3. TYTUŁ I DANE WEJŚCIOWE
+# ---------------------------------------------------------
 
 st.markdown(
     """
-    <h1 style='text-align: center; font-size: 3.5rem; margin-bottom: 2rem;'>
-        Stwórz swój budżet do zera
+    <h1 style='text-align: center; font-size: 3rem; margin-bottom: 2rem;'>
+        Stwórz swój budżet do zera na podstawie zasady 6 słoików
     </h1>
     """,
     unsafe_allow_html=True
@@ -38,9 +39,9 @@ with col2:
 
 st.markdown("---")
 
-
-# 3. DANE I KOLORY
-
+# ---------------------------------------------------------
+# 4. DANE I KOLORY
+# ---------------------------------------------------------
 
 COLOR_MAP = {
     "Wydatki<br>Konieczne (NEC)": "#3366CC",
@@ -51,8 +52,7 @@ COLOR_MAP = {
     "Pomoc Innym<br>(GIVE)": "#0099C6"
 }
 
-# Domyślne wartości procentowe
-DEFAULT_PERCENTS = [50, 15, 12, 12, 10, 1]
+DEFAULT_PERCENTS = [55.0, 10.0, 10.0, 10.0, 10.0, 5.0]
 CATEGORIES = list(COLOR_MAP.keys())
 DESCRIPTIONS = [
     "Jedzenie, rachunki, czynsz",
@@ -63,59 +63,51 @@ DESCRIPTIONS = [
     "Charytatywność, prezenty"
 ]
 
-
-# 4. INTERAKTYWNA TABELA (WŁASNA IMPLEMENTACJA)
-
+# ---------------------------------------------------------
+# 5. INTERAKTYWNA TABELA
+# ---------------------------------------------------------
 
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
     st.subheader("📋 Edytuj swój budżet")
-    st.caption("Zmieniaj procenty poniżej. Suma musi wynosić 100%.")
+    st.caption("Zmieniaj procenty poniżej (możesz używać ułamków). Suma musi wynosić 100%.")
 
-    # Tworzymy nagłówki naszej "tabeli"
     h1, h2, h3 = st.columns([3, 1.5, 2])
     h1.markdown("**Słoik (Kategoria)**")
     h2.markdown("**Procent %**")
     h3.markdown("**Wyliczona Kwota**")
 
-    st.divider() # Linia oddzielająca nagłówek
+    st.divider()
 
-    # --- PĘTLA TWORZĄCA WIERSZE ---
     current_percents = []
 
-    # Iterujemy przez wszystkie kategorie, aby stworzyć wiersze
     for i, category in enumerate(CATEGORIES):
         c1, c2, c3 = st.columns([3, 1.5, 2])
 
-        # Kolor tekstu pobieramy z mapy
         color = COLOR_MAP[category]
-        # Usuwamy <br> z nazwy do wyświetlania w linii (żeby nie łamało w tabeli dziwnie)
         display_name = category.replace("<br>", " ")
 
-        # KOLUMNA 1: Kolorowa nazwa słoika
         with c1:
             st.markdown(
                 f"<div style='color: {color}; font-weight: bold; padding-top: 10px;'>{display_name}</div>",
                 unsafe_allow_html=True
             )
-            # Mały opis pod spodem
             st.caption(DESCRIPTIONS[i])
 
-        # KOLUMNA 2: Input do wpisywania procentów
         with c2:
             val = st.number_input(
                 label="%",
-                min_value=0,
-                max_value=100,
-                value=DEFAULT_PERCENTS[i],
-                step=1,
-                key=f"input_{i}", # Unikalny klucz dla każdego pola
-                label_visibility="collapsed" # Ukrywamy etykietę "Procent", bo jest w nagłówku
+                min_value=0.0,
+                max_value=100.0,
+                value=float(DEFAULT_PERCENTS[i]),
+                step=0.01,
+                format="%.2f",
+                key=f"input_{i}",
+                label_visibility="collapsed"
             )
             current_percents.append(val)
 
-        # KOLUMNA 3: Podgląd kwoty "na żywo" dla tego wiersza
         with c3:
             calc_amount = (val / 100) * income
             st.markdown(
@@ -123,46 +115,60 @@ with col_left:
                 unsafe_allow_html=True
             )
 
-        st.markdown("<hr style='margin: 5px 0'>", unsafe_allow_html=True) # Cienka linia między wierszami
+        st.markdown("<hr style='margin: 5px 0'>", unsafe_allow_html=True)
 
-    # --- LOGIKA BLOKADY I SUMOWANIA ---
-    total_percent = sum(current_percents)
+    # Walidacja sumy
+    total_percent = round(sum(current_percents), 2)
 
-    if total_percent > 100:
-        over = total_percent - 100
+    if total_percent > 100.00:
+        over = round(total_percent - 100.00, 2)
         st.error(f"⛔ **Przekroczono limit!** Suma: {total_percent}%. Usuń {over}%.")
         st.stop()
-    elif total_percent < 100:
-        left = 100 - total_percent
+    elif total_percent < 100.00:
+        left = round(100.00 - total_percent, 2)
         st.warning(f"⚠️ Do rozdania: **{left}%**. (Suma: {total_percent}%)")
     else:
-        st.success("✅ Budżet idealny (100%).")
+        st.success("✅ Budżet idealny (100.00%).")
 
-    # Tworzymy DataFrame wynikowy potrzebny do wykresu
-    final_data = {
-        "Słoik (Kategoria)": CATEGORIES,
+    # Tworzenie DataFrame
+    raw_data = {
+        "Słoik": CATEGORIES,
         "Procent": current_percents,
         "Kwota": [(p/100)*income for p in current_percents],
         "Opis": DESCRIPTIONS
     }
-    final_df = pd.DataFrame(final_data)
-    final_df["Udział %"] = final_df["Procent"].astype(str) + "%"
+    df_raw = pd.DataFrame(raw_data)
 
-    total_alloc = final_df["Kwota"].sum()
+    total_alloc = df_raw["Kwota"].sum()
     st.info(f"Łącznie rozdysponowano: **{total_alloc:.2f} zł**")
 
 
-
-# 5. WIZUALIZACJA (WYKRES)
-
+# ---------------------------------------------------------
+# 6. SQL & WIZUALIZACJA
+# ---------------------------------------------------------
 
 with col_right:
-    st.subheader("📊 Wizualizacja")
+    st.subheader("📊 Wizualizacja ")
+
+    conn = sqlite3.connect(':memory:')
+    df_raw.to_sql('budzet_domowy', conn, index=False, if_exists='replace')
+
+    sql_query = """
+        SELECT 
+            "Słoik" as Kategoria, 
+            Kwota, 
+            Opis 
+        FROM 
+            budzet_domowy
+        WHERE 
+            Kwota > 0
+    """
+    df_sql = pd.read_sql(sql_query, conn)
 
     font_sizes = []
     font_colors = []
 
-    for kategoria in final_df["Słoik (Kategoria)"]:
+    for kategoria in df_sql["Kategoria"]:
         if "FFA" in kategoria or "LTSS" in kategoria:
             font_sizes.append(40)
         else:
@@ -170,12 +176,12 @@ with col_right:
         font_colors.append("white")
 
     fig = px.pie(
-        final_df,
+        df_sql,
         values='Kwota',
-        names='Słoik (Kategoria)',
+        names='Kategoria',
         hole=0.45,
         title=f'Podział: {income:.2f} zł',
-        color='Słoik (Kategoria)',
+        color='Kategoria',
         color_discrete_map=COLOR_MAP,
         hover_data=['Opis']
     )
@@ -195,9 +201,9 @@ with col_right:
 
     st.plotly_chart(fig, use_container_width=True)
 
-
-# 6. STOPKA
-
+# ---------------------------------------------------------
+# 7. STOPKA
+# ---------------------------------------------------------
 st.markdown("---")
-st.caption("Aplikacja stworzona w Pythonie (Streamlit + Plotly)."
-           "Stworzone na potrzeby zaliczenia przez Piotr Pietrasińskiego i Oliwię Kowalik")
+st.caption("Aplikacja stworzona w Pythonie. Dane wykresu przetworzone przez SQL (SQLite)."
+           "Stworzone na potrzeby zaliczenia przez Piotra Pietrasińskiego i Oliwię Kowalik")
