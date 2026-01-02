@@ -52,7 +52,7 @@ COLOR_MAP = {
 }
 
 # Domyślne wartości procentowe
-DEFAULT_PERCENTS = [50, 15, 12, 12, 10, 1]
+DEFAULT_PERCENTS = [50, 15, 10, 10, 10, 5]
 CATEGORIES = list(COLOR_MAP.keys())
 DESCRIPTIONS = [
     "Jedzenie, rachunki, czynsz",
@@ -201,3 +201,4 @@ with col_right:
 st.markdown("---")
 st.caption("Aplikacja stworzona w Pythonie (Streamlit + Plotly)."
            "Stworzone na potrzeby zaliczenia przez Piotr Pietrasińskiego i Oliwię Kowalik")
+
